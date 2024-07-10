@@ -4,7 +4,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.121.1/examples/
 
 // Crear escena
 const scene = new THREE.Scene();
-scene.background = new THREE.Color( 0x0d0e0f );
+scene.background = new THREE.Color( 0xc82b2b );
 // Configurar cámara
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.y = 2.8;
@@ -41,11 +41,13 @@ scene.add(directionalLight1);
 
 // Cargar modelo GLB
 let isAnim = false, mixer,textureLoader, newMixer, clips, firstPage,invertPage,planeActionNew, PortadaAction,parentActionNew;
-let IndexPagina = 0, IndexFotos=0
+let IndexPagina = 0, IndexFotos=2;
 let pages = [];
 var mixers = [];
 let model;
-let page1, page2; 
+let page1;
+let page2; 
+let checkedPage1 = false, checkedPage2 = false, checkedPortada = false;
 
 const loader = new GLTFLoader();
 loader.load(
@@ -122,23 +124,6 @@ loader.load(
         mixers.push(mixer);
     }
 );
- 
-renderer.domElement.addEventListener('mousedown', function(event) {
-/*    if(IndexPagina === 0){
-        [PortadaAction].forEach(action => {
-            action.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
-            action.clampWhenFinished = true; // Detener la animación al finalizar
-            action.play(); // Iniciar la animación
-        });
-    }else{
-        mixers.at(0)._actions.forEach(actions => {
-            actions.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
-            actions.clampWhenFinished = true; // Detener la animación al finalizar
-            actions.play(); // Iniciar la animación
-        });
-    }
- */
-});
 
 var hammer = new Hammer(renderer.domElement);
 
@@ -156,7 +141,7 @@ hammer.on('panstart', function(event) {
 
 hammer.on('panmove', function(event) {
     //console.log('Delta X: ' + event.deltaX)
-    let distance = Math.sqrt(Math.pow(event.deltaX, 2))/100;
+    let distance = Math.sqrt(Math.pow(event.deltaX, 2))/50;
     totalDistance = distance;
 
     if(event.deltaX > 1 && !isAnim)
@@ -185,9 +170,7 @@ hammer.on('panmove', function(event) {
             });
             isAnim = true;
             page1 = InstantitzePage('e');
-            page2 = InstantitzePage('e');
             page1.visible = true;
-            page2.visible = true;
         }else if(IndexPagina < 3){
             mixers.at(0)._actions.forEach(actions => {
                 actions.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
@@ -213,20 +196,7 @@ hammer.on('panmove', function(event) {
         continueAnimation((totalDistance * 10))
     }
 });
-/*
-// Maneja el final del movimiento
-hammer.on('panend', function(event) {
-    console.log(`Pan terminado. Distancia total recorrida: ${totalDistance.toFixed(2)} px. Velocidad final: ${event.velocityX.toFixed(2)} px/s.`);
-    endVelocity = Math.abs(event.velocityX);
-    // Asegurarse de que la velocidad no sea igual a cero
-    if (endVelocity < 0.1) {
-        endVelocity = 1; // Valor mínimo para la velocidad
-        console.log("Demasiado lento, modificamos la velocidad")
-    }
-    
-    continueAnimation(endVelocity);
-});
-*/
+
 function continueAnimation(velocity) {
         requestAnimationFrame(function() {
             continueAnimation(velocity);
@@ -251,7 +221,7 @@ function finish(e) {
             mixers.shift();
         }
         
-        if((e.action._clip.name === 'PlaneAction' || e.action._clip.name === 'PlaneActionInvert') && IndexPagina > 4){
+        if((e.action._clip.name === 'PlaneAction' || e.action._clip.name === 'PlaneActionInvert') && IndexPagina > 3){
             scene.remove(e.target._root)
         }
         console.log(mixers)
@@ -260,15 +230,51 @@ function finish(e) {
         endVelocity = 0; // Resetear la velocidad final
 }
 
+function updatePageMaterial(page, textureFront, textureBack) {
+    page.material = page.material.clone();
+    page.material.side = THREE.DoubleSide;
+    page.material.onBeforeCompile = function (shader) {
+        shader.uniforms.textureFront = { value: textureFront };
+        shader.uniforms.textureBack = { value: textureBack };
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_pars_fragment>',
+            `
+            uniform sampler2D textureFront;
+            uniform sampler2D textureBack;
+            `
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_fragment>',
+            `
+            vec4 frontColor = texture2D(textureFront, vUv);
+            vec4 backColor = texture2D(textureBack, vUv);
+            diffuseColor = gl_FrontFacing ? frontColor : backColor;
+            `
+        );
+    };
+    page.material.needsUpdate = true;
+}
+
 function InstantitzePage(side){
     let newPage = SkeletonUtils.clone(firstPage);
     console.log('Creant Pagina')
     newPage.material = newPage.material.clone();
 
+
+    
+    let textureFront;
+    let textureBack;
+
     // Pagines Textures
-    const textureFront = pages[(IndexFotos%4)];
-    const textureBack = pages[((IndexFotos+1)%4)];
-    IndexFotos += 2
+    if(side == 'e'){
+        textureFront = pages[(IndexFotos%4)];
+        textureBack = pages[((IndexFotos+1)%4)];
+    }else{
+        textureFront = pages[((IndexFotos-1)%4)];
+        textureBack = pages[((IndexFotos)%4)];
+    }
 
     newPage.material.side = THREE.DoubleSide;
     newPage.material.onBeforeCompile = function (shader) {
@@ -292,6 +298,14 @@ function InstantitzePage(side){
             `
         );
     };
+
+    newPage.material.needsUpdate = true;
+     // Pagines Textures
+     if(side == 'e'){
+        IndexFotos += 2
+    }else{
+        IndexFotos -= 2
+    }
     newMixer = new THREE.AnimationMixer(newPage);
    
     if(side == 'e'){
@@ -321,7 +335,63 @@ function InstantitzePage(side){
     //console.log(scene);
 }
 
+function CheckImage(){
+    let planeAction = mixers.at(0)?._actions.find(action => action._clip.name === "PlaneAction");
+    let planeActionInvert = mixers.at(0)?._actions.find(action => action._clip.name === "PlaneActionInvert");
+    //let PortadaAction = mixers.at(0)?._actions.find(action => action._clip.name === "PortadaAction");
+    
+    if(planeAction && IndexPagina == 2 && !checkedPortada){
+        if(planeAction.time > 0.1){
+            page2 = InstantitzePage('e');
+            page2.visible = true;
+            checkedPortada = true;
+        }
+    }
+    if (planeAction && IndexPagina > 4) {
+        if(planeAction.time > 0.5 && !checkedPage1){
+            console.log('Check Inici Animacio Dreta');
+            //Aqui ha de canviar el material del color del de la deta per el seguent
+            checkedPage1 = true;
+
+            // Pagines Textures
+            const textureFront = pages[((IndexFotos+4)%4)];
+            const textureBack = pages[((IndexFotos+5)%4)];
+        
+            updatePageMaterial(page2, textureFront, textureBack);
+        }
+        if(planeAction.time > 4 && checkedPage1){
+            checkedPage1 = false;
+
+            // Pagines Textures
+            const textureFront1 = pages[((IndexFotos-2)%4)];
+            const textureBack1 = pages[((IndexFotos-1)%4)];
+            updatePageMaterial(page1, textureFront1, textureBack1);
+        }
+
+    } else if (planeActionInvert && IndexPagina > 2) {
+        if(planeActionInvert.time > 0.5 && !checkedPage2){
+            console.log('Check Inici Animacio Esquerra');
+            checkedPage2 = true;      
+            // Pagines Textures
+            const textureFront = pages[((IndexFotos+2)%4)];
+            const textureBack = pages[((IndexFotos)%4)];
+        
+            updatePageMaterial(page1, textureFront, textureBack);
+        }
+        if(planeActionInvert.time > 4 && checkedPage2){
+            console.log('Check Final Animacio Esquerra');
+            checkedPage2 = false;
+
+            // Pagines Textures
+            const textureFront1 = pages[((IndexFotos-2)%4)];
+            const textureBack1 = pages[((IndexFotos-1)%4)];
+            updatePageMaterial(page2, textureFront1, textureBack1);
+        }
+    }
+}
+
 function animate() {
+    CheckImage();
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
 }
