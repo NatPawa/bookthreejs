@@ -14,7 +14,7 @@ window.addEventListener('deviceorientation', (evt) => {
     // Crear un objeto de rotación adicional de 90 grados alrededor del eje X
     const adjustment = new THREE.Euler(THREE.Math.degToRad(-90), 0, 0, 'YXZ');    
     // Combinar las dos rotaciones
-    euler.x += adjustment.x;
+    //euler.x += adjustment.x;
     scene.rotation.set(euler.x,euler.y, euler.z);
     console.log(euler.x);
 });
