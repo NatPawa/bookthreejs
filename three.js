@@ -2,22 +2,22 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.121.1/build/three.m
 import { SkeletonUtils } from 'https://cdn.jsdelivr.net/npm/three@0.121.1/examples/jsm/utils/SkeletonUtils.js';
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.121.1/examples/jsm/loaders/GLTFLoader.js";
 
-function handleOrientation(evt) {
+window.addEventListener('deviceorientation', (evt) => {
         console.log(evt)
         // Convertir grados a radianes
-        const alpha = THREE.Math.degToRad( evt.alpha);
-        const beta = THREE.Math.degToRad(evt.beta);
-        const gamma = THREE.Math.degToRad(evt.gamma);
+        const alpha = THREE.Math.degToRad(Math.max(-10, Math.min(10, evt.alpha)));
+        const beta = THREE.Math.degToRad(Math.max(80, Math.min(100, evt.beta)));
+        const gamma = THREE.Math.degToRad(Math.max(-5, Math.min(5, evt.gamma)));
         // Crear un objeto de rotación basado en la orientación del dispositivo
     const euler = new THREE.Euler(beta, alpha, gamma, 'YXZ');
-  
+    console.log(beta);
     // Crear un objeto de rotación adicional de 90 grados alrededor del eje X
     const adjustment = new THREE.Euler(THREE.Math.degToRad(-90), 0, 0, 'YXZ');    
     // Combinar las dos rotaciones
-    //euler.x += adjustment.x;
-    scene.rotation.set(euler.x,euler.y, euler.z);
-    console.log(euler.x);
-};
+    euler.x += adjustment.x;
+    scene.rotation.set(euler.x, euler.y, euler.z);
+
+});
 
 // Crear escena
 const scene = new THREE.Scene();
@@ -75,21 +75,6 @@ loader.load(
     function (gltf) {
 
         model = gltf.scene;
-
-                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(permissionState => {
-                        if (permissionState === 'granted') {
-                            window.addEventListener('deviceorientation', handleOrientation);
-                        } else {
-                            alert('Permission to access device orientation denied.');
-                        }
-                    })
-                    .catch(console.error);
-            } else {
-                // Manejar navegadores que no requieren permisos (por ejemplo, en escritorio)
-                window.addEventListener('deviceorientation', handleOrientation);
-            }
 
         firstPage = gltf.scene.getObjectByName('Pagina__Invert001');
         invertPage = gltf.scene.getObjectByName('Pagina');
