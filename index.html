@@ -3,16 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Basic Scene</title>
-    <style>
-        body { margin: 0; }
-        canvas { display: block; }
-    </style>
+    <title>Device Orientation Permission</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js" integrity="sha512-n8IpKWzDnBOcBhRlHirMZOUvEq2bLRMuJGjuVqbzUJwtTsgwOgK5aS0c1JA647XWYfqvXve8k3PtZdzpipFjgg==" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>     
-    <script src="three.js" type="module"></script>
+    <button id="request-permission-button">Request Device Orientation Permission</button>
+
+    <script>
+        document.getElementById('request-permission-button').addEventListener('click', () => {
+            // Verificar si el navegador soporta la API y solicitar permisos
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            alert('Permission to access device orientation denied.');
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Manejar navegadores que no requieren permisos (por ejemplo, en escritorio)
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        });
+
+        function handleOrientation(evt) {
+            alert(evt);
+        }
+        
+        // Inicializar la escena de Three.js
+        const scene = new THREE.Scene();
+        // Aquí puedes agregar el resto de la configuración de tu escena (cámara, renderizador, objetos, etc.)
+    </script>
 </body>
 </html>
