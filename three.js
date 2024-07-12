@@ -2,6 +2,18 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.121.1/build/three.m
 import { SkeletonUtils } from 'https://cdn.jsdelivr.net/npm/three@0.121.1/examples/jsm/utils/SkeletonUtils.js';
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.121.1/examples/jsm/loaders/GLTFLoader.js";
 
+window.addEventListener('deviceorientation', (evt) => {
+        console.log(evt)
+        // Convertir grados a radianes
+        const alpha = THREE.Math.degToRad(evt.alpha);
+        const beta = THREE.Math.degToRad(evt.beta);
+        const gamma = THREE.Math.degToRad(evt.gamma);
+        
+        // Crear un objeto de rotación basado en la orientación del dispositivo
+        const euler = new THREE.Euler(beta,alpha, gamma, 'YXZ');
+        scene.rotation.set(euler.x, euler.y, euler.z);
+});
+
 // Crear escena
 const scene = new THREE.Scene();
 scene.background = new THREE.Color( 0xc82b2b );
@@ -40,168 +52,257 @@ directionalLight1.shadow.camera.right = 120;
 scene.add(directionalLight1);
 
 // Cargar modelo GLB
-let mixer,textureLoader, newMixer, clips, firstPage, planeAction,planeActionNew, emptyAction,KeyActionNew,emptyActionNew, parentAction,parentActionNew;
-let IndexPagina = 0;
+let isAnim = false, mixer,textureLoader, newMixer, clips, firstPage,invertPage,planeActionNew, PortadaAction,parentActionNew;
+let IndexPagina = 0, IndexFotos=0;
 let pages = [];
-let ids = [];
+var mixers = [];
+let model;
+let page1;
+let page2; 
+let checkedPage1 = false, checkedPage2 = false, checkedPortada = false;
+let deltaTime = 0;
+let distance = 0;
+const totalPages = 4;
 
 const loader = new GLTFLoader();
 loader.load(
     './Llibre Portfoli Soufyan Web.glb', // Ruta relativa al archivo GLB
     function (gltf) {
-        const model = gltf.scene;
 
-        firstPage = gltf.scene.getObjectByName('Parent');
-        pages.push(firstPage);
-        configurarMateriales(model);
-        configurarAnimaciones(model,gltf);
+        model = gltf.scene;
+
+        firstPage = gltf.scene.getObjectByName('Pagina__Invert001');
+        invertPage = gltf.scene.getObjectByName('Pagina');
+        firstPage.visible = false;
+        invertPage.visible = false;
+
+        // Crear TextureLoader para cargar texturas
+        textureLoader = new THREE.TextureLoader();
+            
+        for (let i = 0; i < totalPages; i++) {
+            pages[i] = textureLoader.load(`./Pagines/pagina-${(i)}.jpeg`)
+        }
+        console.log(pages)
+        // Tapa Textures
+        const baseColorTexture = textureLoader.load('Material Portfolio Tapa Base Color.png');
+        const metallicTexture = textureLoader.load('Material Portfolio Tapa Metalic.png');
+        const roughnessTexture = textureLoader.load('Material Portfolio Tapa Roughness.png');
+        const normalTexture = textureLoader.load('Material Portfolio Tapa Normal.png');
+
+        // Aplicar texturas a los materiales del modelo
+        model.traverse((child) => {
+            console.log(child.name)
+            if (child.isMesh) {
+                console.log(child.name + ' ' + child.isMesh);
+                if (child.isMesh && child.name === 'Cube002') {
+                    // Ajustar las propiedades del material para usar las texturas cargadas
+                    child.material.map = baseColorTexture;
+                    child.material.metalnessMap = metallicTexture;
+                    child.material.roughnessMap = roughnessTexture;
+                    child.material.normalMap = normalTexture;
+
+                    child.material.map.flipY = false;
+                    child.material.roughnessMap.flipY = false;
+                    child.material.metalnessMap.flipY = false;
+                    child.material.normalMap.flipY = false;
+
+                    child.material.metalness = 1;
+                    child.material.roughness = 1;
+                    child.material.normalScale.set(2, 2);
+
+                    // Ajustar otras propiedades según sea necesario
+                    child.material.needsUpdate = true;
+                }
+
+                if (child.isMesh && child.name === 'Pagina') {
+
+                    child.material.metalness = 0;
+                    child.material.roughness = 0.3;
+                    child.material.needsUpdate = true;
+                }
+            }
+        });
+
         scene.add(model);
+
+        mixer = new THREE.AnimationMixer(model);
+        
+        mixer.addEventListener('finished',finish);
+
+         
+        clips = gltf.animations;
+        console.log("Animaciones encontradas:", gltf.animations);
+
+        // Crear acciones para las animaciones
+        PortadaAction = mixer.clipAction(THREE.AnimationClip.findByName(clips, 'PortadaAction'));
+        PortadaAction.setEffectiveTimeScale(0.01); 
+        mixers.push(mixer);
     }
 );
 
-animate.mixers = [];
-
 var hammer = new Hammer(renderer.domElement);
 
+// Configura Hammer.js para detectar eventos de 'pan'
 hammer.get('pan').set({ direction: Hammer.DIRECTION_ALL });
 
 var totalDistance = 0;
 var endVelocity = 0;
-var velocitatGeneral = 0;
-var indexImagen = 0;
-var mousedown = false;
 
-renderer.domElement.addEventListener('mousedown', function(event) {
-    mousedown = true;
-    CheckInstance()
-});
-
-renderer.domElement.addEventListener('mouseup', function(event) {
-    mousedown = false;
-    CheckInstance()
-});
-
+// Maneja el inicio del movimiento
 hammer.on('panstart', function(event) {
-    //console.log(animate.mixers[IndexPagina]._actions[1]);
     totalDistance = 0; // Resetear la distancia total
     endVelocity = 0; // Resetear la velocidad final
 });
 
 hammer.on('panmove', function(event) {
-    console.log(IndexPagina)
     //console.log('Delta X: ' + event.deltaX)
-    const distance = (event.deltaX / 100) * -1;
+    distance = Math.sqrt(Math.pow(event.deltaX, 2))/50;
     totalDistance = distance;
-    //console.log('Pages length: ' + pages.length)
-    //console.log('IndexPagina: ' + (IndexPagina+1))
-    //console.log(IndexPagina);
-    if(totalDistance >= 0){
-        velocitatGeneral = 1
-    }else{
-        velocitatGeneral = -1
-    }
-    if(animate.mixers[IndexPagina]._actions[0].time == 0){
-        animate.mixers[IndexPagina]._actions.forEach(actions => {
-            actions.reset().play(); // Iniciar la animación
-        });
-    }
-    
-    //console.log('Distance:' + distance)
-    CheckInstance()
-    animate.mixers[IndexPagina].update(distance);
-});
+    console.log(totalDistance);
 
-// Maneja el final del movimiento
-hammer.on('panend', function(event) {
-    //console.log(`Pan terminado. Distancia total recorrida: ${totalDistance.toFixed(2)} px. Velocidad final: ${event.velocityX.toFixed(2)} px/s.`);
-    endVelocity = Math.abs(event.velocityX);
-    // Asegurarse de que la velocidad no sea igual a cero
-    if (endVelocity < 0.4) {
-        endVelocity = 1; // Valor mínimo para la velocidad
-        console.log("Demasiado lento, modificamos la velocidad")
+    if(event.deltaX > 1 && !isAnim)
+    { 
+        let newPage = InstantitzePage('d')
+        mixers = mixers.slice(-1);
+        mixers.at(0)._actions.forEach(actions => {
+            actions.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
+            actions.clampWhenFinished = true; // Detener la animación al finalizar
+            actions.time = 0.01
+            actions.play(); // Iniciar la animación
+        });
+        isAnim = true;
+        newPage.visible = true;
+        console.log('Aqui Dreta')
+        console.log(event.deltaX)
     }
-    CheckInstance()
-    continueAnimation(endVelocity);
+    if(event.deltaX < -0.5 && !isAnim)
+    {
+        console.log('Esquerra')
+
+        if(IndexPagina === 0){
+            [PortadaAction].forEach(action => {
+                action.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
+                action.clampWhenFinished = true; // Detener la animación al finalizar
+                action.play(); // Iniciar la animación
+            });
+            isAnim = true;
+            console.log('174')
+            page1 = InstantitzePage('e');
+            page1.visible = true;
+        }else if(IndexPagina < 3){
+            mixers.at(0)._actions.forEach(actions => {
+                actions.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
+                actions.clampWhenFinished = true; // Detener la animación al finalizar
+                actions.play(); // Iniciar la animación
+            });
+            isAnim = true;
+        }
+        else{
+            console.log('186')
+            let newPage = InstantitzePage('e')
+            mixers = mixers.slice(-1);
+            mixers.at(0)._actions.forEach(actions => {
+                actions.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
+                actions.clampWhenFinished = true; // Detener la animación al finalizar
+                actions.play(); // Iniciar la animación
+            });
+            isAnim = true;
+            newPage.visible = true;
+            console.log('Aqui')
+        }
+
+        continueAnimation((totalDistance * 100))
+    }
 });
 
 function continueAnimation(velocity) {
-    //console.log(animate.mixers[IndexPagina]._actions[2])
-   /* console.log('continueAnimation')
-    console.log('Time: ' + animate.mixers[IndexPagina]._actions[1].time)
-    console.log('Duration: ' + animate.mixers[IndexPagina]._actions[1].getClip().duration) */
-    if (animate.mixers[IndexPagina]._actions[2].time <= (animate.mixers[IndexPagina]._actions[2].getClip().duration-0.01)) //Le resto 0.1 a la duracion para que esta termine por completa si no se ejecuta la siguiente
-    {
-        // Continuar actualizando el mezclador hasta que la animación se haya completado
         requestAnimationFrame(function() {
             continueAnimation(velocity);
         });
 
-        // Calcular deltaTime basado en la velocidad
-        const deltaTime = (velocitatGeneral * velocity * 0.016) * 100; // 0.016 es aproximadamente un frame a 60fps
-        //console.log(animate.mixers[IndexPagina])
-        //console.log('Velocity: ' + velocity)
-        console.log('Velocity General: ' + velocitatGeneral)
-        console.log('Time: ' + animate.mixers[IndexPagina]._actions[2].time)
-        console.log('Delta Time: ' + deltaTime)
-        animate.mixers[IndexPagina].update(deltaTime);
-    }else{
-        animate.mixers[IndexPagina].update(5)
-    }
-    CheckInstance()
+        deltaTime = velocity * 0.016;
+        if(mixers.at(0)){
+            console.log("Delta " + deltaTime)
+            mixers.at(0).update(deltaTime);
+        }
 }
 
-async function finish(e) {
-        console.log(animate.mixers[IndexPagina])
-        if(e.action._clip.name === 'ParentAction'){
-            await esperarMouseUp();
-            
-            if(totalDistance >= 0){
-                IndexPagina++;
-                // Reiniciar la velocidad y otros parámetros al finalizar
-                velocitatGeneral = 0;
-                totalDistance = 0; // Resetear la distancia total
-                endVelocity = 0; // Resetear la velocidad final
-                console.log('Índice actual:', IndexPagina);
-            }
-           
+function finish(e) {
+        //console.log('Finish')
+        console.log(e)
+        if(e.action._clip.name === 'PortadaAction' ){
+            IndexPagina++
+            console.log('Índice actual:', IndexPagina);
+            mixers.shift();
         }
-        console.log('Indice: ' + IndexPagina);
+        if(e.action._clip.name === 'PlaneAction'){
+            console.log('Índice actual:', IndexPagina);
+            mixers.shift();
+        }
+        
+        if((e.action._clip.name === 'PlaneAction' || e.action._clip.name === 'PlaneActionInvert') && IndexPagina > 3){
+            console.log('Eliminar')
+            console.log(e.target._root)
+            scene.remove(e.target._root)
+        }
+
+        isAnim = false;
+        totalDistance = 0; // Resetear la distancia total
+        endVelocity = 0; // Resetear la velocidad final
+        deltaTime = 0;
+        distance = 0;
+
+        console.log("Index Fotos " + IndexFotos)
 }
 
-function esperarMouseUp() {
-    return new Promise(resolve => { 
-        if(!mousedown){
-            resolve();
-            return;
-        }
-        function onMouseUp(event) {
-            document.removeEventListener('mouseup', onMouseUp);
-            resolve(event);
-        }
-        document.addEventListener('mouseup', onMouseUp);
-    });
+function updatePageMaterial(page, textureFront, textureBack) {
+    page.material = page.material.clone();
+    page.material.side = THREE.DoubleSide;
+    page.material.onBeforeCompile = function (shader) {
+        shader.uniforms.textureFront = { value: textureFront };
+        shader.uniforms.textureBack = { value: textureBack };
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_pars_fragment>',
+            `
+            uniform sampler2D textureFront;
+            uniform sampler2D textureBack;
+            `
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_fragment>',
+            `
+            vec4 frontColor = texture2D(textureFront, vUv);
+            vec4 backColor = texture2D(textureBack, vUv);
+            diffuseColor = gl_FrontFacing ? frontColor : backColor;
+            `
+        );
+    };
+    page.material.needsUpdate = true;
 }
 
-function InstantitzePage(){
-
-    const totalImatges = 3
+function InstantitzePage(side){
     let newPage = SkeletonUtils.clone(firstPage);
-    newPage.children[1].material = newPage.children[1].material.clone()
-    indexImagen = ( (IndexPagina) % totalImatges);
-    var indexImagenBack = ( (IndexPagina + 3 ) % totalImatges) ;
-    // Pagines Textures
-    const textureFront = textureLoader.load(`./Pagines/pagina-${indexImagen+1}.jpeg`);
-    const textureBack = textureLoader.load(`./Pagines/pagina-${indexImagenBack}.jpeg`);
+    console.log('Creant Pagina')
+    newPage.material = newPage.material.clone();
+
+
     
-    const material = newPage.children[1].material;
+    let textureFront;
+    let textureBack;
 
-    //newPage.children[1].material.map = PaginaColorTexture
+    // Pagines Textures
+    if(side == 'e'){
+        textureFront = pages[(IndexFotos%totalPages)];
+        textureBack = pages[((IndexFotos+1)%totalPages)];
+    }else{
+        textureFront = pages[((IndexFotos-2)%totalPages)];
+        textureBack = pages[((IndexFotos-1)%totalPages)];
+    }
 
-    material.side = THREE.DoubleSide; // Hacer que el material sea visible desde ambos lados
-
-    //TODO: He de fer una funcio per utilitzar la mateixa que la primera instancia
-    // Usar `onBeforeCompile` para cambiar la textura según la normal
-    material.onBeforeCompile = function (shader) {
+    newPage.material.side = THREE.DoubleSide;
+    newPage.material.onBeforeCompile = function (shader) {
         shader.uniforms.textureFront = { value: textureFront };
         shader.uniforms.textureBack = { value: textureBack };
 
@@ -223,167 +324,114 @@ function InstantitzePage(){
         );
     };
 
-    //TODO: Segurament tambe es pot juntar tot amb la primera instancia
+    newPage.material.needsUpdate = true;
+     // Pagines Textures
+     if(side == 'e' && IndexPagina > 1){
+        IndexFotos += 2
+        console.log(IndexFotos);
+    }
+    if(side == 'd' && IndexPagina > 1){
+        IndexFotos -= 2
+        console.log(IndexFotos);
+    }
     newMixer = new THREE.AnimationMixer(newPage);
-    parentActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'KeyAction'));
-    planeActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'EmptyAction'));
-    emptyActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'ParentAction'));
-    KeyActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'PlaneAction'));
-    
-    parentActionNew.setEffectiveTimeScale(0.01); 
-    planeActionNew.setEffectiveTimeScale(0.01); 
-    emptyActionNew.setEffectiveTimeScale(0.01); 
-    KeyActionNew.setEffectiveTimeScale(0.01); 
+   
+    if(side == 'e'){
+        planeActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'KeyAction.002'));
+        parentActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'PlaneAction'));
+        planeActionNew.setEffectiveTimeScale(0.01); 
+        parentActionNew.setEffectiveTimeScale(0.01); 
+    }else{
+        planeActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'KeyAction.001'));
+        parentActionNew = newMixer.clipAction(THREE.AnimationClip.findByName(clips, 'PlaneActionInvert'));
+        planeActionNew.setEffectiveTimeScale(0.01); 
+        parentActionNew.setEffectiveTimeScale(0.01); 
+    }
 
-    animate.mixers.push(newMixer);
+    mixers.push(newMixer);
     newMixer.addEventListener('finished',finish);
 
-
-    [parentActionNew,emptyActionNew,KeyActionNew].forEach(actions => {
+    [planeActionNew, parentActionNew].forEach(actions => {
         actions.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
         actions.clampWhenFinished = true; // Detener la animación al finalizar
-        actions.reset().play(); // Iniciar la animación
     });
-
-    newMixer.setTime(0)
-    pages.push(newPage);
+    
+    newMixer.setTime(0);
     scene.add(newPage);
-    //console.log(pages);
+    IndexPagina++
+    return newPage
+    //console.log(scene);
 }
 
-function configurarMateriales(model) {
-    // Crear TextureLoader para cargar texturas
-    textureLoader = new THREE.TextureLoader();
+function CheckImage(){
+    let planeAction = mixers.at(0)?._actions.find(action => action._clip.name === "PlaneAction");
+    let planeActionInvert = mixers.at(0)?._actions.find(action => action._clip.name === "PlaneActionInvert");
+    //let PortadaAction = mixers.at(0)?._actions.find(action => action._clip.name === "PortadaAction");
     
-    // Tapa Textures
-    const baseColorTexture = textureLoader.load('Material Portfolio Tapa Base Color.png');
-    const metallicTexture = textureLoader.load('Material Portfolio Tapa Metalic.png');
-    const roughnessTexture = textureLoader.load('Material Portfolio Tapa Roughness.png');
-    const normalTexture = textureLoader.load('Material Portfolio Tapa Normal.png');
-
-    // Aplicar texturas a los materiales del modelo
-    model.traverse((child) => {
-        console.log(child.name)
-        if (child.isMesh) {
-            console.log(child.name + ' ' + child.isMesh);
-            if (child.isMesh && child.name === 'Cube002') {
-                // Ajustar las propiedades del material para usar las texturas cargadas
-                child.material.map = baseColorTexture;
-                child.material.metalnessMap = metallicTexture;
-                child.material.roughnessMap = roughnessTexture;
-                child.material.normalMap = normalTexture;
-
-                child.material.map.flipY = false;
-                child.material.roughnessMap.flipY = false;
-                child.material.metalnessMap.flipY = false;
-                child.material.normalMap.flipY = false;
-
-                child.material.metalness = 1;
-                child.material.roughness = 1;
-                child.material.normalScale.set(2, 2);
-
-                // Ajustar otras propiedades según sea necesario
-                child.material.needsUpdate = true;
-            }
-
-            if (child.isMesh && child.name === 'Pagina') {
-                child.material.metalness = 0;
-                child.material.roughness = 0.3;
-                
-                
-                let totalImatges1 = 3
-
-                const material = child.material;
-                indexImagen = ( (IndexPagina) % totalImatges1);
-                var indexImagenBack = ( (IndexPagina + 3 ) % totalImatges1) ;
-                // Pagines Textures
-                const textureFront1 = textureLoader.load(`./Pagines/pagina-${indexImagen+1}.jpeg`);
-                const textureBack1 = textureLoader.load(`./Pagines/pagina-${indexImagenBack}.jpeg`);
-                
-                //newPage.children[1].material.map = PaginaColorTexture
-
-                material.side = THREE.DoubleSide; // Hacer que el material sea visible desde ambos lados
-
-                // Usar `onBeforeCompile` para cambiar la textura según la normal
-                material.onBeforeCompile = function (shader) {
-                    shader.uniforms.textureFront = { value: textureFront1 };
-                    shader.uniforms.textureBack = { value: textureBack1 };
-
-                    shader.fragmentShader = shader.fragmentShader.replace(
-                        '#include <map_pars_fragment>',
-                        `
-                        uniform sampler2D textureFront;
-                        uniform sampler2D textureBack;
-                        `
-                    );
-
-                    shader.fragmentShader = shader.fragmentShader.replace(
-                        '#include <map_fragment>',
-                        `
-                        vec4 frontColor = texture2D(textureFront, vUv);
-                        vec4 backColor = texture2D(textureBack, vUv);
-                        diffuseColor = gl_FrontFacing ? frontColor : backColor;
-                        `
-                    );
-                };
-
-                // Ajustar otras propiedades según sea necesario
-                child.material.needsUpdate = true;
-            }
+    if(planeAction && IndexPagina == 2 && !checkedPortada){
+        if(planeAction.time > 0.1){
+            console.log('349')
+            page2 = InstantitzePage('e');
+            page2.visible = true;
+            checkedPortada = true;
         }
-    });
-}
-
-function configurarAnimaciones(model,gltf){
-    mixer = new THREE.AnimationMixer(model);
-    mixer.addEventListener('finished',finish);
-    
-    clips = gltf.animations;
-    console.log("Animaciones encontradas:", gltf.animations);
-
-    // Crear acciones para las animaciones
-    planeAction = mixer.clipAction(THREE.AnimationClip.findByName(clips, 'KeyAction'));
-    emptyAction = mixer.clipAction(THREE.AnimationClip.findByName(clips, 'ArmatureAction'));
-    parentAction = mixer.clipAction(THREE.AnimationClip.findByName(clips, 'ParentAction'));
-    planeAction.setEffectiveTimeScale(0.01); 
-    emptyAction.setEffectiveTimeScale(0.01); 
-    parentAction.setEffectiveTimeScale(0.01); 
-    animate.mixers.push(mixer);
-
-    [planeAction,emptyAction,parentAction].forEach(actions => {
-        actions.setLoop(THREE.LoopOnce); // Establecer el bucle para que solo se ejecute una vez
-        actions.clampWhenFinished = true; // Detener la animación al finalizar
-        actions.play(); // Iniciar la animación
-    });
-}
-
-function CheckInstance(){
-    
-    //console.log('checkig ' + IndexPagina)
-    //console.log('pages.length ' + pages.length)
-
-    if(pages.length == (IndexPagina+1) && animate.mixers[IndexPagina]._actions[2].time > (animate.mixers[IndexPagina]._actions[2].getClip().duration * 0.05)){ //Calculo que añada la nueva pagina al pasar el 5% de la animacion para que no aparezca encima de la que se esta animando
-        console.log('crear pagina')
-        InstantitzePage()
     }
-    if(pages.length == (IndexPagina+2) && animate.mixers[IndexPagina]._actions[2].time < (animate.mixers[IndexPagina]._actions[2].getClip().duration * 0.05)){ //Calculo que añada la nueva pagina al pasar el 5% de la animacion para que no aparezca encima de la que se esta animando
-        console.log('ENTER')
-        scene.remove(pages[IndexPagina+1]);
-        animate.mixers.pop()
-        pages.pop();
-    }
-    if( pages.length == (IndexPagina+2) && animate.mixers[IndexPagina]._actions[2].time > (animate.mixers[IndexPagina]._actions[2].getClip().duration * 0.7)){ //Calculo que añada la nueva pagina al pasar el 5% de la animacion para que no aparezca encima de la que se esta animando
-        console.log('Quitar ultima pagina')
-        console.log(pages[IndexPagina-1])
-        scene.remove(pages[IndexPagina-1]);
-        //animate.mixers.pop()
-        //pages.pop();
+    if (planeAction && IndexPagina > 1) {
+        if((planeAction.time < 1 && planeAction.time > 0.5) && !checkedPage1){
+            console.log('Check Inici Animacio Dreta');
+            //Aqui ha de canviar el material del color del de la deta per el seguent
+            checkedPage1 = true;
+
+            // Pagines Textures
+            const textureFront = pages[((IndexFotos)%totalPages)];
+            const textureBack = pages[((IndexFotos+1)%totalPages)];
+        
+            updatePageMaterial(page2, textureFront, textureBack);
+        }
+        if(planeAction.time > 4 && checkedPage1 && IndexPagina > 2){
+            console.log('Check Final Animacio Dreta');
+            checkedPage1 = false;
+
+            // Pagines Textures
+            const textureFront1 = pages[((IndexFotos-2)%totalPages)];
+            const textureBack1 = pages[((IndexFotos-1)%totalPages)];
+            updatePageMaterial(page1, textureFront1, textureBack1);
+        }
+
+    } 
+    if (planeActionInvert) {
+        //console.log('Time: ' + planeActionInvert.time)
+        if((planeActionInvert.time < 1 && planeActionInvert.time > 0.5) && !checkedPage2){
+            //console.log('Check Inici Animacio Esquerra');
+            checkedPage2 = true;      
+            // Pagines Textures
+            console.log('Index fotos inside: ' + IndexFotos)
+            console.log('Resultats inside: ' + ((IndexFotos+1)%totalPages))
+            console.log(planeActionInvert.time)
+            const textureFront = pages[5]; //No importa
+            const textureBack = pages[((IndexFotos-1)%totalPages)];
+            
+            updatePageMaterial(page1, textureFront, textureBack);
+        }
+        if(planeActionInvert.time > 4 && checkedPage2){
+            //console.log('Check Final Animacio Esquerra');
+            checkedPage2 = false;
+
+            console.log('Index fotos inside: ' + IndexFotos)
+            console.log('Resultats inside: ' + ((IndexFotos+1)%totalPages))
+            // Pagines Textures
+            const textureFront1 = pages[((IndexFotos)%totalPages)];
+            const textureBack1 = pages[5];//No importa
+            updatePageMaterial(page2, textureFront1, textureBack1);
+        }
     }
 }
 
 function animate() {
-    requestAnimationFrame(animate);
+    CheckImage();
     renderer.render(scene, camera);
+    requestAnimationFrame(animate);
 }
 
+// Iniciar la animación
 animate();
