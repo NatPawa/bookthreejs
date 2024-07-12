@@ -5,9 +5,9 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.121.1/examples/
 window.addEventListener('deviceorientation', (evt) => {
         console.log(evt)
         // Convertir grados a radianes
-        const alpha = THREE.Math.degToRad(Math.max(-10, Math.min(10, evt.alpha)));
+        const alpha = THREE.Math.degToRad(Math.max(-20, Math.min(20, evt.alpha)));
         const beta = THREE.Math.degToRad(Math.max(80, Math.min(100, evt.beta)));
-        const gamma = THREE.Math.degToRad(Math.max(-5, Math.min(5, evt.gamma)));
+        const gamma = THREE.Math.degToRad(Math.max(-20, Math.min(20, evt.gamma)));
         // Crear un objeto de rotación basado en la orientación del dispositivo
     const euler = new THREE.Euler(beta, alpha, gamma, 'YXZ');
     console.log(beta);
