@@ -2,7 +2,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.121.1/build/three.m
 import { SkeletonUtils } from 'https://cdn.jsdelivr.net/npm/three@0.121.1/examples/jsm/utils/SkeletonUtils.js';
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.121.1/examples/jsm/loaders/GLTFLoader.js";
 
-window.addEventListener('deviceorientation', (evt) => {
+function handleOrientation(evt) {
         console.log(evt)
         // Convertir grados a radianes
         const alpha = THREE.Math.degToRad( evt.alpha);
@@ -17,7 +17,7 @@ window.addEventListener('deviceorientation', (evt) => {
     //euler.x += adjustment.x;
     scene.rotation.set(euler.x,euler.y, euler.z);
     console.log(euler.x);
-});
+};
 
 // Crear escena
 const scene = new THREE.Scene();
@@ -75,6 +75,21 @@ loader.load(
     function (gltf) {
 
         model = gltf.scene;
+
+                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            alert('Permission to access device orientation denied.');
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Manejar navegadores que no requieren permisos (por ejemplo, en escritorio)
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
 
         firstPage = gltf.scene.getObjectByName('Pagina__Invert001');
         invertPage = gltf.scene.getObjectByName('Pagina');
